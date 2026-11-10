@@ -34,6 +34,9 @@
   const gradCss = (key) => { const s = BACKGROUNDS[key] || BACKGROUNDS.sunset; return `linear-gradient(135deg, ${s.join(', ')})`; };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const clone = (o) => JSON.parse(JSON.stringify(o));
+  const DEMO = !!window.REEL_DEMO; // browser-only build (scripts/build-demo.js)
+  const mediaUrl = (m) => m.url || '/media/' + m.file;
+  const ask = (msg) => DEMO || confirm(msg); // the demo's host page cannot show confirm()
   const safeLS = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* */ } } };
 
   function toast(msg, type = 'ok', action) {
@@ -135,7 +138,7 @@
     const isVideo = m.kind === 'video';
     const dur = isVideo ? Math.min(m.duration || 5, 10) : 3;
     return {
-      id: uid(), kind: m.kind, mediaId: m.id, src: '/media/' + m.file, name: m.name,
+      id: uid(), kind: m.kind, mediaId: m.id, src: mediaUrl(m), name: m.name,
       duration: Math.round(dur * 10) / 10, trimIn: 0, mediaDuration: isVideo ? m.duration || 0 : 0,
       volume: 1, muted: false, filter: 'none', transition: 'fade', motion: isVideo ? 'none' : 'zoomIn', fit: 'cover', text: null,
     };
@@ -236,7 +239,7 @@
       return;
     }
     for (const m of items) {
-      const src = '/media/' + m.file;
+      const src = mediaUrl(m);
       const media = m.kind === 'video' ? h('video', { src: src + '#t=0.4', preload: 'metadata', muted: true, playsinline: true }) : h('img', { src, loading: 'lazy', alt: '' });
       if (m.kind === 'video') media.muted = true;
       const card = h('div', { class: 'card', draggable: 'true', title: m.name },
@@ -245,7 +248,7 @@
         h('button', { class: 'add', title: 'Add to reel', onclick: (e) => { e.stopPropagation(); addClips([clipFromMedia(m)]); toast('Added to your reel'); } }, icon('plus')),
         h('button', { class: 'icon-btn sm del', title: 'Delete from library', onclick: async (e) => {
           e.stopPropagation();
-          if (!confirm(`Delete "${m.name}" from your library?`)) return;
+          if (!ask(`Delete "${m.name}" from your library?`)) return;
           try { await API.deleteMedia(m.id); loadLibrary(); } catch (err) { toast(err.message, 'error'); }
         } }, icon('trash')),
         h('div', { class: 'meta' }, h('span', null, m.name), h('span', null, m.kind === 'video' ? fmtS(m.duration) : '')),
@@ -632,7 +635,7 @@
 
   /* --------------------------------------------------------------- music */
   function setMusic(m) {
-    commit(() => { S.project.music = m ? { mediaId: m.id, src: '/media/' + m.file, name: m.name, volume: 0.7, start: 0, duration: m.duration || 0 } : null; });
+    commit(() => { S.project.music = m ? { mediaId: m.id, src: mediaUrl(m), name: m.name, volume: 0.7, start: 0, duration: m.duration || 0 } : null; });
     if (m) toast('Music added');
   }
   function renderMusic() {
@@ -670,6 +673,7 @@
     IDEAS[S.aiType].forEach((t) => ideas.append(h('button', { class: 'chip', onclick: () => { $('#aiPrompt').value = t; } }, t)));
     $('#aiPrompt').placeholder = S.aiType === 'animate' ? 'How should it move? (optional)' : IDEAS[S.aiType][0];
     $('#keyBanner').hidden = S.hasKey;
+    if (DEMO) { $('#keyBanner p').innerHTML = '<b>AI is off in this demo</b><br/>Generating photos and videos needs the full app running with its backend.'; const b = $('#keyBanner .btn'); if (b) b.remove(); }
   }
   function renderDurations() {
     const m = (S.models[S.aiType] || []).find((x) => x.id === $('#aiModel').value);
@@ -684,6 +688,7 @@
     imgs.forEach((m) => sel.append(h('option', { value: m.id }, m.name)));
   }
   async function generate() {
+    if (DEMO) return toast('AI generation needs the full app with its backend', 'error');
     if (!S.hasKey) { openModal('settings'); return toast('Add your MuAPI key to use AI', 'error'); }
     const prompt = $('#aiPrompt').value.trim();
     if (!prompt && S.aiType !== 'animate') { $('#aiPrompt').focus(); return toast('Describe what you want first', 'error'); }
@@ -718,7 +723,7 @@
       const m = S.library.find((x) => x.id === newDone.mediaId);
       if (m) {
         // probe real duration for generated videos
-        if (m.kind === 'video') await new Promise((r) => { const v = document.createElement('video'); v.preload = 'metadata'; v.onloadedmetadata = () => { m.duration = v.duration; API.patchMedia(m.id, { duration: v.duration, width: v.videoWidth, height: v.videoHeight }).catch(() => {}); r(); }; v.onerror = r; v.src = '/media/' + m.file; });
+        if (m.kind === 'video') await new Promise((r) => { const v = document.createElement('video'); v.preload = 'metadata'; v.onloadedmetadata = () => { m.duration = v.duration; API.patchMedia(m.id, { duration: v.duration, width: v.videoWidth, height: v.videoHeight }).catch(() => {}); r(); }; v.onerror = r; v.src = mediaUrl(m); });
         addClips([clipFromMedia(m)]);
         toast('AI ' + (m.kind === 'image' ? 'photo' : 'video') + ' added to your reel');
       }
@@ -755,7 +760,7 @@
     list.forEach((p) => root.append(h('div', { class: 'project-item' + (p.id === S.project.id ? ' current' : ''), onclick: async () => { await openProject(p.id); closeModals(); } },
       icon('film'), h('div', null, h('b', null, p.name), h('span', null, `${p.clips} clips · ${new Date(p.updatedAt).toLocaleString()}`)),
       h('button', { class: 'icon-btn sm', title: 'Delete project', onclick: async (e) => {
-        e.stopPropagation(); if (!confirm(`Delete project "${p.name}"?`)) return;
+        e.stopPropagation(); if (!ask(`Delete project "${p.name}"?`)) return;
         await API.deleteProject(p.id);
         if (p.id === S.project.id) { const rest = list.filter((x) => x.id !== p.id); rest.length ? await openProject(rest[0].id) : await newProject(); }
         renderProjects();
@@ -764,6 +769,21 @@
 
   /* -------------------------------------------------------------- export */
   let quality = 8;
+  let exportBlob = null;
+  // In the demo the host page blocks plain download links, so save through the viewer instead
+  async function saveExport(e) {
+    if (!DEMO || !exportBlob) return;
+    e.preventDefault();
+    try {
+      const dl = window.claude && (await window.claude.use('downloads'));
+      if (!dl) return toast('Saving files is not available in this view', 'error');
+      await dl.save({ filename: exportBlob.filename, data: exportBlob.blob });
+      toast('Reel saved');
+    } catch (err) {
+      if (err && err.code === 'declined') return;
+      toast(err && err.code === 'rate_limited' ? 'Wait a moment, then try again' : 'Could not save the file here', 'error');
+    }
+  }
   function openExport() {
     if (!S.project.clips.length) return toast('Add some clips before exporting', 'error');
     engine.pause();
@@ -803,7 +823,8 @@
       $('#exportTitle').textContent = 'Your reel is ready 🎉';
       $('#exportCancel').textContent = 'Close';
       S.exported = true; updateChrome();
-      a.click();
+      exportBlob = { blob, filename: `${name}.${ext}` };
+      if (!DEMO) a.click();
     } catch (e) {
       $('#exportModal').hidden = true;
       toast(e.message, 'error');
@@ -909,6 +930,7 @@
     // export
     $$('#qualitySeg button').forEach((b) => b.addEventListener('click', () => { $$('#qualitySeg button').forEach((x) => x.classList.toggle('active', x === b)); quality = +b.dataset.q; }));
     $('#exportStart').addEventListener('click', startExport);
+    $('#exportDownload').addEventListener('click', saveExport);
     $('#captionOut').addEventListener('input', (e) => { S.project.caption = e.target.value; scheduleSave(); });
     $('#copyCaption').addEventListener('click', async () => { try { await navigator.clipboard.writeText(S.project.caption || ''); toast('Caption copied'); } catch (e) { toast('Could not copy', 'error'); } });
 
@@ -966,6 +988,14 @@
     if (pick) await openProject(pick.id); else await newProject();
     renderAI();
     pollJobs();
+    if (DEMO) {
+      $('#saveState').hidden = true;
+      const kf = $('#keyInput').closest('.field'); kf.nextElementSibling.remove(); kf.remove(); $('#saveKey').remove();
+      if (!S.timeline.size) { // open on a working example instead of an empty shell
+        S.timeline.fromArray([TITLE_TEMPLATES[0], TITLE_TEMPLATES[2], TITLE_TEMPLATES[5], TITLE_TEMPLATES[3]].map(titleClip));
+        refresh();
+      }
+    }
   }
   boot();
 })();

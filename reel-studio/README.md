@@ -89,3 +89,11 @@ Environment variables: `PORT` (5173), `HOST` (127.0.0.1; set `0.0.0.0` to expose
 ```
 npm test
 ```
+
+## Browser-only demo
+
+```
+node scripts/build-demo.js        # → dist/reel-studio-demo.html
+```
+
+This bundles the studio into one HTML page that runs without the backend. `public/js/api-local.js` stands in for the server and runs the same `ds.js` structures in the page. In the demo nothing is saved between visits and AI generation is off.
