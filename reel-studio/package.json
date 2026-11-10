@@ -1,0 +1,14 @@
+{
+  "name": "reel-maker-studio",
+  "version": "1.0.0",
+  "description": "Reel maker studio: a zero-dependency Node backend built on the DSLAB data-structure experiments, with AI generation via MuAPI (from open-generative-ai).",
+  "private": true,
+  "license": "MIT",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": { "node": ">=18" }
+}
